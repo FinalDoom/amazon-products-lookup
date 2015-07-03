@@ -18,9 +18,11 @@
 	<bean class="com.maxpowered.amazon.advertising.api.processors.OutputProcessor">
 		<property name="processors">
 			<list>
-				<bean class="com.maxpowered.amazon.advertising.api.processors.FileProcessor" />
+				<ref bean="fileProcessor"/>
 <!-- 				<bean class="com.maxpowered.amazon.advertising.api.processors.MySqlProcessor" /> -->
 			</list>
 		</property>
 	</bean>
+	
+	<bean id="fileProcessor" class="com.maxpowered.amazon.advertising.api.processors.FileProcessor" />
 </beans>

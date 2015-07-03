@@ -49,6 +49,24 @@ public class AmazonProductsAPI {
 	 */
 	public Item itemLookup(final String asin, final String responseGroups) throws IOException, JAXBException,
 			XMLStreamException, APIRequestException {
+		final List<Item> items = itemsLookup(asin, responseGroups);
+		return items == null ? null : items.get(0);
+	}
+
+	/**
+	 * Do an ItemLookup request for multiple items
+	 *
+	 * @see http://docs.amazonwebservices.com/AWSECommerceService/2010-09-01/DG/index.html?ItemLookup.html
+	 *
+	 * @param responseGroups
+	 *            Comma-seperated response groups.
+	 * @throws JAXBException
+	 * @throws IOException
+	 * @throws XMLStreamException
+	 * @throws APIRequestException
+	 */
+	public List<Item> itemsLookup(final String asin, final String responseGroups) throws IOException, JAXBException,
+			XMLStreamException, APIRequestException {
 		final Map<String, String> params = new HashMap<String, String>();
 		params.put("Operation", "ItemLookup");
 		params.put("ItemId", asin);
@@ -63,7 +81,7 @@ public class AmazonProductsAPI {
 				&& response.getItems().get(0).getItem() != null && response.getItems().get(0).getItem().size() > 0) {
 			// May need some error checking here in case things aren't always returned. I'd expect an error if not
 			// though
-			return response.getItems().get(0).getItem().get(0);
+			return response.getItems().get(0).getItem();
 		}
 		return null;
 	}

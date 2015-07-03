@@ -51,8 +51,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 
-import com.amazon.webservices.awsecommerceservice._2013_08_01.Item;
-
 /**
  * This class contains all the logic for signing requests to the Amazon Product Advertising API.
  */
@@ -81,13 +79,9 @@ public class SignedRequestsHelper {
 	private static final String REQUEST_METHOD = "GET";
 
 	private static Unmarshaller unmarshaller;
-	private static String apiVersion;
 	static {
 		try {
-			final String packageName = Item.class.getPackage().getName();
-			unmarshaller = JAXBContext.newInstance(packageName).createUnmarshaller();
-			final String[] packageComponents = packageName.split("\\.");
-			apiVersion = packageComponents[packageComponents.length - 1].substring(1).replaceAll("_", "-");
+			unmarshaller = JAXBContext.newInstance(Constants.API_PACKAGE).createUnmarshaller();
 		} catch (final JAXBException ex) {
 			LOG.error("Error creating unmarshaller", ex);
 		}
@@ -173,10 +167,6 @@ public class SignedRequestsHelper {
 		mac.init(secretKeySpec);
 	}
 
-	public void setApiVersion(final String versionString) {
-		apiVersion = versionString;
-	}
-
 	/**
 	 * This method signs requests in hashmap form. It returns a URL that should be used to fetch the response. The URL
 	 * returned should not be modified in any way, doing so will invalidate the signature and Amazon will reject the
@@ -187,7 +177,7 @@ public class SignedRequestsHelper {
 		params.put("AssociateTag", associateTag);
 		params.put("AWSAccessKeyId", awsAccessKeyId);
 		params.put("Timestamp", timestamp());
-		params.put("Version", apiVersion);
+		params.put("Version", Constants.API_VERSION);
 
 		// The parameters need to be processed in lexicographical order, so we'll
 		// use a TreeMap implementation for that.
