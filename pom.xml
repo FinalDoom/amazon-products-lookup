@@ -15,21 +15,41 @@
 	</repositories>
 
 	<dependencies>
+		<!-- Base and charset conversion stuff -->
 		<dependency>
 			<groupId>commons-codec</groupId>
 			<artifactId>commons-codec</artifactId>
 			<version>1.10</version>
 		</dependency>
-<!-- 		<dependency> -->
-<!-- 			<groupId>commons-io</groupId> -->
-<!-- 			<artifactId>commons-io</artifactId> -->
-<!-- 			<version>2.4</version> -->
-<!-- 		</dependency> -->
+		<dependency>
+			<groupId>commons-io</groupId>
+			<artifactId>commons-io</artifactId>
+			<version>2.4</version>
+ 		</dependency>
+ 		<!-- This is something about generating the java objects for the response XML I think. I forget. -->
 		<dependency>
 			<groupId>org.apache.axis</groupId>
 			<artifactId>axis</artifactId>
 			<version>1.4</version>
 		</dependency>
+		<!-- IOC Injection basics -->
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-beans</artifactId>
+			<version>4.1.7.RELEASE</version>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-context</artifactId>
+			<version>4.1.7.RELEASE</version>
+		</dependency>
+		<!-- Logging -->
+		<dependency>
+			<groupId>org.slf4j</groupId>
+			<artifactId>slf4j-api</artifactId>
+			<version>1.7.12</version>
+		</dependency>
+		
 	</dependencies>
 
 	<build>
