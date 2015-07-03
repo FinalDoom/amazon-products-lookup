@@ -44,19 +44,23 @@ import org.springframework.context.support.AbstractApplicationContext;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 
 import com.amazon.webservices.awsecommerceservice._2013_08_01.Item;
+import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.maxpowered.amazon.advertising.api.APIRequestException;
 import com.maxpowered.amazon.advertising.api.AmazonProductsAPI;
+import com.maxpowered.amazon.advertising.api.ResponseGroup;
+import com.maxpowered.amazon.advertising.api.processors.OutputProcessor;
 
 /*
  * This class shows how to make a simple authenticated ItemLookup call to the Amazon Product Advertising API.
- *
+ * 
  * See the README.html that came with this sample for instructions on configuring and running the sample.
  */
 public class App {
 	private static final Logger LOG = LoggerFactory.getLogger(App.class);
 
-	private static final int DEFAULT_APP_THROTTLE = 10;
+	private static final int DEFAULT_APP_THROTTLE = 2000;
 	private static final String PROPERTY_APP_THROTTLE = "app.throttle";
 	private static final String PROPERTY_APP_OUTPUT = "app.output";
 	private static final String PROPERTY_APP_INPUT = "app.input";
@@ -160,20 +164,33 @@ public class App {
 			// Get throttle rate
 			final int throttle = Math.min(cmd.hasOption("t") ? Integer.valueOf(cmd.getOptionValue("t"))
 					: throttleDefault, DEFAULT_APP_THROTTLE);
-			LOG.debug("Throttle is {} requests per second", throttle);
-			final int wait = 1000 / throttle;
+			LOG.debug("Throttle is {} requests per hour", throttle);
+			// We don't want to hit our limit, just under an hour worth of milliseconds
+			final int wait = 3540000 / throttle;
 
 			// Get the signed requests helper
 			final AmazonProductsAPI api = ctx.getBeanFactory().getBean(AmazonProductsAPI.class);
+			// Get the Output processor
+			final OutputProcessor output = ctx.getBeanFactory().getBean(OutputProcessor.class);
 
 			// Search the list of remaining ASINs
 			for (final String asin : getASINsToLookUp(inputStream, processedStream)) {
+
 				// This could be easily configured through CLI or properties
-				final String responseGroups = "Small";
+				final List<String> responseGroups = Lists.newArrayList();
+				for (final ResponseGroup responseGroup : new ResponseGroup[] { ResponseGroup.IMAGES,
+						ResponseGroup.ITEM_ATTRIBUTES }) {
+					responseGroups.add(responseGroup.getResponseGroupName());
+				}
+				final String responseGroupString = Joiner.on(",").join(responseGroups);
 
-				final Item item = api.itemLookup(asin, responseGroups);
+				try {
+					final Item item = api.itemLookup(asin, responseGroupString);
 
-				LOG.debug("Got item {}", item);
+					LOG.info("Got item titled {}", item.getItemAttributes().getTitle());
+				} catch (final APIRequestException e) {
+					LOG.error("Exception with API request", e);
+				}
 
 				Thread.sleep(wait);
 			}

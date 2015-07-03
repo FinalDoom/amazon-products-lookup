@@ -14,6 +14,7 @@ import com.maxpowered.amazon.advertising.api.SignedRequestsHelper;
 public class Utils {
 	private static final Logger LOG = LoggerFactory.getLogger(Utils.class);
 
+	// No longer used
 	public static InputStream replaceStringFromStream(final InputStream in, final String find, final String replacement) {
 		InputStream ret = null;
 		try {

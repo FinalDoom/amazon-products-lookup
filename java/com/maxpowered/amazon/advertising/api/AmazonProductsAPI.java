@@ -18,6 +18,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import com.amazon.webservices.awsecommerceservice._2013_08_01.Item;
 import com.amazon.webservices.awsecommerceservice._2013_08_01.ItemLookupResponse;
 import com.amazon.webservices.awsecommerceservice._2013_08_01.ItemSearchResponse;
+import com.amazon.webservices.awsecommerceservice._2013_08_01.Request;
 
 /**
  * Finds products through the Amazon Products API.
@@ -44,17 +45,24 @@ public class AmazonProductsAPI {
 	 * @throws JAXBException
 	 * @throws IOException
 	 * @throws XMLStreamException
+	 * @throws APIRequestException
 	 */
 	public Item itemLookup(final String asin, final String responseGroups) throws IOException, JAXBException,
-			XMLStreamException {
+			XMLStreamException, APIRequestException {
 		final Map<String, String> params = new HashMap<String, String>();
 		params.put("Operation", "ItemLookup");
 		params.put("ItemId", asin);
 		params.put("ResponseGroup", responseGroups);
 
 		final ItemLookupResponse response = getResponseItem(params, ItemLookupResponse.class);
+		final Request itemRequest = response.getItems().get(0).getRequest();
+		if (itemRequest.getErrors() != null) {
+			throw new APIRequestException(itemRequest.getErrors().getError().get(0));
+		}
 		if (response != null && response.getItems() != null && response.getItems().size() > 0
 				&& response.getItems().get(0).getItem() != null && response.getItems().get(0).getItem().size() > 0) {
+			// May need some error checking here in case things aren't always returned. I'd expect an error if not
+			// though
 			return response.getItems().get(0).getItem().get(0);
 		}
 		return null;
@@ -77,9 +85,10 @@ public class AmazonProductsAPI {
 	 * @throws JAXBException
 	 * @throws IOException
 	 * @throws XMLStreamException
+	 * @throws APIRequestException
 	 */
 	public List<Item> itemSearch(final String query, final String responseGroup, final String searchIndex)
-			throws IOException, JAXBException, XMLStreamException {
+			throws IOException, JAXBException, XMLStreamException, APIRequestException {
 		final Map<String, String> params = new HashMap<String, String>();
 		params.put("SearchIndex", searchIndex);
 		params.put("Operation", "ItemSearch");
@@ -87,6 +96,10 @@ public class AmazonProductsAPI {
 		params.put("ResponseGroup", responseGroup);
 
 		final ItemSearchResponse response = getResponseItem(params, ItemSearchResponse.class);
+		final Request itemRequest = response.getItems().get(0).getRequest();
+		if (itemRequest.getErrors() != null) {
+			throw new APIRequestException(itemRequest.getErrors().getError().get(0));
+		}
 		if (response != null && response.getItems() != null && response.getItems().size() > 0
 				&& response.getItems().get(0).getItem() != null) {
 			return response.getItems().get(0).getItem();

@@ -52,7 +52,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 
 import com.amazon.webservices.awsecommerceservice._2013_08_01.Item;
-import com.maxpowered.util.Utils;
 
 /**
  * This class contains all the logic for signing requests to the Amazon Product Advertising API.
@@ -359,15 +358,7 @@ public class SignedRequestsHelper {
 		final String urlString = sign(params);
 		LOG.debug("Got signed url string {}", urlString);
 		final URL url = new URL(urlString);
-		final InputStream urlStream = url.openStream();
-
-		try {
-			// Fetch
-			return Utils.replaceStringFromStream(urlStream,
-					" xmlns=\"http://webservices.amazon.com/AWSECommerceService/" + apiVersion + "\"", "");
-		} finally {
-			urlStream.close();
-		}
+		return url.openStream();
 	}
 
 	public <T> T unmarshal(final InputStream responseStream, final Class<T> clazz) throws JAXBException,
