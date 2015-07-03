@@ -1,6 +1,8 @@
 package com.maxpowered.amazon.advertising.api;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -8,6 +10,7 @@ import java.util.Map;
 import javax.xml.bind.JAXBException;
 import javax.xml.stream.XMLStreamException;
 
+import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,11 +25,14 @@ import com.amazon.webservices.awsecommerceservice._2013_08_01.ItemSearchResponse
  * Operations supported so far are: ItemLookup, ItemSearch.
  */
 public class AmazonProductsAPI {
-	@SuppressWarnings("unused")
 	private static final Logger LOG = LoggerFactory.getLogger(AmazonProductsAPI.class);
 
+	private final SignedRequestsHelper helper;
+
 	@Autowired
-	private SignedRequestsHelper helper;
+	public AmazonProductsAPI(final SignedRequestsHelper helper) {
+		this.helper = helper;
+	}
 
 	/**
 	 * Do an ItemLookup request.
@@ -46,8 +52,12 @@ public class AmazonProductsAPI {
 		params.put("ItemId", asin);
 		params.put("ResponseGroup", responseGroups);
 
-		final ItemLookupResponse response = helper.fetchAndUnmarshal(params, ItemLookupResponse.class);
-		return response.getItems().get(0).getItem().get(0);
+		final ItemLookupResponse response = getResponseItem(params, ItemLookupResponse.class);
+		if (response != null && response.getItems() != null && response.getItems().size() > 0
+				&& response.getItems().get(0).getItem() != null && response.getItems().get(0).getItem().size() > 0) {
+			return response.getItems().get(0).getItem().get(0);
+		}
+		return null;
 	}
 
 	/**
@@ -76,7 +86,22 @@ public class AmazonProductsAPI {
 		params.put("Keywords", query);
 		params.put("ResponseGroup", responseGroup);
 
-		final ItemSearchResponse response = helper.fetchAndUnmarshal(params, ItemSearchResponse.class);
-		return response.getItems().get(0).getItem();
+		final ItemSearchResponse response = getResponseItem(params, ItemSearchResponse.class);
+		if (response != null && response.getItems() != null && response.getItems().size() > 0
+				&& response.getItems().get(0).getItem() != null) {
+			return response.getItems().get(0).getItem();
+		}
+		return null;
+	}
+
+	private <T> T getResponseItem(final Map<String, String> params, final Class<T> responseClass) throws JAXBException,
+			XMLStreamException, IOException {
+		if (LOG.isDebugEnabled()) {
+			final byte[] responseBytes = IOUtils.toByteArray(helper.fetch(params));
+			LOG.debug("Got ItemLookupResponse {}", new String(responseBytes, StandardCharsets.UTF_8));
+			return helper.unmarshal(new ByteArrayInputStream(responseBytes), responseClass);
+		} else {
+			return helper.fetchAndUnmarshal(params, responseClass);
+		}
 	}
 }

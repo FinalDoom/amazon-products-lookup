@@ -8,7 +8,19 @@
 		http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-3.0.xsd">
 
 	<context:annotation-config/>
-	<context:property-placeholder location="classpath:aws.properties" ignore-unresolvable="false" />
+	<context:property-placeholder location="classpath:aws.properties,
+			classpath:app.properties"
+			ignore-unresolvable="false" />
 
 	<bean class="com.maxpowered.amazon.advertising.api.SignedRequestsHelper" />
+	<bean class="com.maxpowered.amazon.advertising.api.AmazonProductsAPI" />
+	
+	<bean class="com.maxpowered.amazon.advertising.api.processors.OutputProcessor">
+		<property name="processors">
+			<list>
+				<bean class="com.maxpowered.amazon.advertising.api.processors.FileProcessor" />
+<!-- 				<bean class="com.maxpowered.amazon.advertising.api.processors.MySqlProcessor" /> -->
+			</list>
+		</property>
+	</bean>
 </beans>

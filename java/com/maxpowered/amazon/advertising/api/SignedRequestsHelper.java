@@ -14,7 +14,7 @@
  *
  * Amazon Product Advertising API Signed Requests Sample Code
  *
- * API Version: 2009-03-31
+ * API Version: 2013-08-01
  *
  */
 
@@ -43,7 +43,6 @@ import javax.crypto.spec.SecretKeySpec;
 import javax.xml.bind.JAXBContext;
 import javax.xml.bind.JAXBException;
 import javax.xml.bind.Unmarshaller;
-import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamException;
 
 import org.apache.commons.codec.binary.Base64;
@@ -82,7 +81,6 @@ public class SignedRequestsHelper {
 	 */
 	private static final String REQUEST_METHOD = "GET";
 
-	private static final XMLInputFactory XML_FACTORY = XMLInputFactory.newInstance();
 	private static Unmarshaller unmarshaller;
 	private static String apiVersion;
 	static {
@@ -176,6 +174,10 @@ public class SignedRequestsHelper {
 		mac.init(secretKeySpec);
 	}
 
+	public void setApiVersion(final String versionString) {
+		apiVersion = versionString;
+	}
+
 	/**
 	 * This method signs requests in hashmap form. It returns a URL that should be used to fetch the response. The URL
 	 * returned should not be modified in any way, doing so will invalidate the signature and Amazon will reject the
@@ -186,6 +188,7 @@ public class SignedRequestsHelper {
 		params.put("AssociateTag", associateTag);
 		params.put("AWSAccessKeyId", awsAccessKeyId);
 		params.put("Timestamp", timestamp());
+		params.put("Version", apiVersion);
 
 		// The parameters need to be processed in lexicographical order, so we'll
 		// use a TreeMap implementation for that.
@@ -344,26 +347,36 @@ public class SignedRequestsHelper {
 
 	public <T> T fetchAndUnmarshal(final Map<String, String> params, final Class<T> clazz) throws IOException,
 			JAXBException, XMLStreamException {
+		return unmarshal(fetch(params), clazz);
+	}
+
+	public InputStream fetch(final Map<String, String> params) throws IOException {
 		if (!params.containsKey("Operation")) {
 			throw new RuntimeException("params must have an Operation");
 		}
 
 		// Sign the params in a URL as Amazon specifies.
-		final URL url = new URL(sign(params));
+		final String urlString = sign(params);
+		LOG.debug("Got signed url string {}", urlString);
+		final URL url = new URL(urlString);
 		final InputStream urlStream = url.openStream();
 
-		InputStream filteredStream = null;
-		T response = null;
 		try {
-			// Unmarshal.
-			filteredStream = Utils.replaceStringFromStream(urlStream,
+			// Fetch
+			return Utils.replaceStringFromStream(urlStream,
 					" xmlns=\"http://webservices.amazon.com/AWSECommerceService/" + apiVersion + "\"", "");
-			response = unmarshaller.unmarshal(XML_FACTORY.createXMLStreamReader(filteredStream), clazz).getValue();
 		} finally {
 			urlStream.close();
-			if (filteredStream != null) {
-				filteredStream.close();
-			}
+		}
+	}
+
+	public <T> T unmarshal(final InputStream responseStream, final Class<T> clazz) throws JAXBException,
+			XMLStreamException, IOException {
+		T response;
+		try {
+			response = clazz.cast(unmarshaller.unmarshal(responseStream));
+		} finally {
+			responseStream.close();
 		}
 
 		return response;
