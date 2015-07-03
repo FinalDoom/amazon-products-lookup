@@ -4,7 +4,6 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 import javax.xml.bind.JAXBException;
@@ -14,11 +13,10 @@ import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 
-import com.amazon.webservices.awsecommerceservice._2013_08_01.Item;
 import com.amazon.webservices.awsecommerceservice._2013_08_01.ItemLookupResponse;
 import com.amazon.webservices.awsecommerceservice._2013_08_01.ItemSearchResponse;
-import com.amazon.webservices.awsecommerceservice._2013_08_01.Request;
 
 /**
  * Finds products through the Amazon Products API.
@@ -27,30 +25,14 @@ import com.amazon.webservices.awsecommerceservice._2013_08_01.Request;
  */
 public class AmazonProductsAPI {
 	private static final Logger LOG = LoggerFactory.getLogger(AmazonProductsAPI.class);
-
 	private final SignedRequestsHelper helper;
+	private final boolean logFullResponse;
 
 	@Autowired
-	public AmazonProductsAPI(final SignedRequestsHelper helper) {
+	public AmazonProductsAPI(final SignedRequestsHelper helper,
+			@Value("${app.logFullResponse}") final boolean logFullResponse) {
 		this.helper = helper;
-	}
-
-	/**
-	 * Do an ItemLookup request.
-	 *
-	 * @see http://docs.amazonwebservices.com/AWSECommerceService/2010-09-01/DG/index.html?ItemLookup.html
-	 *
-	 * @param responseGroups
-	 *            Comma-seperated response groups.
-	 * @throws JAXBException
-	 * @throws IOException
-	 * @throws XMLStreamException
-	 * @throws APIRequestException
-	 */
-	public Item itemLookup(final String asin, final String responseGroups) throws IOException, JAXBException,
-			XMLStreamException, APIRequestException {
-		final List<Item> items = itemsLookup(asin, responseGroups);
-		return items == null ? null : items.get(0);
+		this.logFullResponse = logFullResponse;
 	}
 
 	/**
@@ -63,27 +45,18 @@ public class AmazonProductsAPI {
 	 * @throws JAXBException
 	 * @throws IOException
 	 * @throws XMLStreamException
+	 * @throws APIResponseException
 	 * @throws APIRequestException
 	 */
-	public List<Item> itemsLookup(final String asin, final String responseGroups) throws IOException, JAXBException,
-			XMLStreamException, APIRequestException {
+	public ItemLookupResponse itemLookup(final String asin, final String responseGroups) throws JAXBException,
+			XMLStreamException, IOException, APIResponseException {
 		final Map<String, String> params = new HashMap<String, String>();
 		params.put("Operation", "ItemLookup");
 		params.put("ItemId", asin);
 		params.put("ResponseGroup", responseGroups);
 
 		final ItemLookupResponse response = getResponseItem(params, ItemLookupResponse.class);
-		final Request itemRequest = response.getItems().get(0).getRequest();
-		if (itemRequest.getErrors() != null) {
-			throw new APIRequestException(itemRequest.getErrors().getError().get(0));
-		}
-		if (response != null && response.getItems() != null && response.getItems().size() > 0
-				&& response.getItems().get(0).getItem() != null && response.getItems().get(0).getItem().size() > 0) {
-			// May need some error checking here in case things aren't always returned. I'd expect an error if not
-			// though
-			return response.getItems().get(0).getItem();
-		}
-		return null;
+		return response;
 	}
 
 	/**
@@ -104,9 +77,10 @@ public class AmazonProductsAPI {
 	 * @throws IOException
 	 * @throws XMLStreamException
 	 * @throws APIRequestException
+	 * @throws APIResponseException
 	 */
-	public List<Item> itemSearch(final String query, final String responseGroup, final String searchIndex)
-			throws IOException, JAXBException, XMLStreamException, APIRequestException {
+	public ItemSearchResponse itemSearch(final String query, final String responseGroup, final String searchIndex)
+			throws IOException, JAXBException, XMLStreamException, APIRequestException, APIResponseException {
 		final Map<String, String> params = new HashMap<String, String>();
 		params.put("SearchIndex", searchIndex);
 		params.put("Operation", "ItemSearch");
@@ -114,25 +88,38 @@ public class AmazonProductsAPI {
 		params.put("ResponseGroup", responseGroup);
 
 		final ItemSearchResponse response = getResponseItem(params, ItemSearchResponse.class);
-		final Request itemRequest = response.getItems().get(0).getRequest();
-		if (itemRequest.getErrors() != null) {
-			throw new APIRequestException(itemRequest.getErrors().getError().get(0));
-		}
-		if (response != null && response.getItems() != null && response.getItems().size() > 0
-				&& response.getItems().get(0).getItem() != null) {
-			return response.getItems().get(0).getItem();
-		}
-		return null;
+		return response;
+		/*
+		 * This is how you get the items. Not used right now, so just move this logic wherever it gets used. See the
+		 * usage of the above method
+		 */
+		// final Request itemRequest = response.getItems().get(0).getRequest();
+		// if (itemRequest.getErrors() != null) {
+		// throw new APIRequestException(itemRequest.getErrors().getError().get(0));
+		// }
+		// if (response != null && response.getItems() != null && response.getItems().size() > 0
+		// && response.getItems().get(0).getItem() != null) {
+		// return response.getItems().get(0).getItem();
+		// }
+		// return null;
 	}
 
 	private <T> T getResponseItem(final Map<String, String> params, final Class<T> responseClass) throws JAXBException,
-			XMLStreamException, IOException {
-		if (LOG.isDebugEnabled()) {
-			final byte[] responseBytes = IOUtils.toByteArray(helper.fetch(params));
-			LOG.debug("Got ItemLookupResponse {}", new String(responseBytes, StandardCharsets.UTF_8));
-			return helper.unmarshal(new ByteArrayInputStream(responseBytes), responseClass);
-		} else {
-			return helper.fetchAndUnmarshal(params, responseClass);
+			XMLStreamException, IOException, APIResponseException {
+		try {
+			if (LOG.isDebugEnabled() || logFullResponse) {
+				final byte[] responseBytes = IOUtils.toByteArray(helper.fetch(params));
+				if (logFullResponse) {
+					LOG.info("Got ItemLookupResponse {}", new String(responseBytes, StandardCharsets.UTF_8));
+				} else {
+					LOG.debug("Got ItemLookupResponse {}", new String(responseBytes, StandardCharsets.UTF_8));
+				}
+				return helper.unmarshal(new ByteArrayInputStream(responseBytes), responseClass);
+			} else {
+				return helper.fetchAndUnmarshal(params, responseClass);
+			}
+		} catch (final IOException e) {
+			throw new APIResponseException("API returned a non-200 response code", e);
 		}
 	}
 }

@@ -346,7 +346,7 @@ public class SignedRequestsHelper {
 
 		// Sign the params in a URL as Amazon specifies.
 		final String urlString = sign(params);
-		LOG.debug("Got signed url string {}", urlString);
+		LOG.info("Got signed request url string {}", urlString);
 		final URL url = new URL(urlString);
 		return url.openStream();
 	}

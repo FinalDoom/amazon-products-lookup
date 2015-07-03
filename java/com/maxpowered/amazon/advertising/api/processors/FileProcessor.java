@@ -93,8 +93,12 @@ public class FileProcessor implements Processor, AutoCloseable {
 
 	@Override
 	public void close() throws IOException {
-		IOUtils.write("</Items>", outputStream, StandardCharsets.UTF_8);
-		outputStream.close();
+		if (started) {
+			IOUtils.write("</Items>", outputStream, StandardCharsets.UTF_8);
+		}
+		if (outputStream != null) {
+			outputStream.close();
+		}
 	}
 
 }

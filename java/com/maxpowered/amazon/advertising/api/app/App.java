@@ -47,11 +47,15 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.support.AbstractApplicationContext;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 
+import com.amazon.webservices.awsecommerceservice._2013_08_01.Errors;
 import com.amazon.webservices.awsecommerceservice._2013_08_01.Item;
+import com.amazon.webservices.awsecommerceservice._2013_08_01.ItemLookupResponse;
+import com.amazon.webservices.awsecommerceservice._2013_08_01.Request;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.maxpowered.amazon.advertising.api.APIRequestException;
+import com.maxpowered.amazon.advertising.api.APIResponseException;
 import com.maxpowered.amazon.advertising.api.AmazonProductsAPI;
 import com.maxpowered.amazon.advertising.api.ResponseGroup;
 import com.maxpowered.amazon.advertising.api.processors.FileProcessor;
@@ -67,6 +71,7 @@ public class App {
 
 	private static final int MAX_APP_THROTTLE = 25000;
 	private static final int DEFAULT_APP_THROTTLE = 2000;
+	private static final int THROTTLE_MAX_RETRIES = 3;
 	private static final String PROPERTY_APP_THROTTLE = "app.throttle";
 	private static final String PROPERTY_APP_OUTPUT = "app.output";
 	private static final String PROPERTY_APP_INPUT = "app.input";
@@ -76,24 +81,26 @@ public class App {
 	private static final String STD_OUT_STR = "std.out";
 	public static final String DEFAULT_STR = "Defaults to ";
 
-	public static List<String> getASINsToLookUp(final InputStream input, final FileInputStream processedFile)
+	public static Set<String> getASINsToLookUp(final InputStream input, final FileInputStream processedFile)
 			throws FileNotFoundException, IOException {
 		LOG.debug("Reading ASINS from {} and excluding those in {}", input, processedFile);
 		final Set<String> ret = Sets.newHashSet(IOUtils.readLines(input, StandardCharsets.UTF_8));
+		LOG.info("Got {} input ASINs", ret.size());
 		// Get any ASINs already processed
 		final Set<String> processed = Sets.newHashSet(IOUtils.readLines(processedFile, StandardCharsets.UTF_8));
+		LOG.info("Got {} processed ASINs", processed.size());
 
-		return Lists.newArrayList(Sets.difference(ret, processed));
+		return Sets.difference(ret, processed);
 	}
 
 	public static void recordProcessed(final List<String> asins, final FileOutputStream processedFile)
 			throws IOException {
-		try (final BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(processedFile))) {
-			for (final String asin : asins) {
-				writer.write(asin);
-				writer.write(System.lineSeparator());
-			}
+		final BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(processedFile));
+		for (final String asin : asins) {
+			writer.write(asin);
+			writer.write(System.lineSeparator());
 		}
+		writer.flush();
 	}
 
 	public static String getOptionDefaultBasedOnSpringProperty(final AbstractApplicationContext ctx,
@@ -222,30 +229,71 @@ public class App {
 				}
 				final String responseGroupString = Joiner.on(",").join(responseGroups);
 
+				int throttledRetries = 0;
 				final List<String> asinGroup = Lists.newArrayListWithCapacity(10);
 				// Search the list of remaining ASINs
-				for (final String asin : getASINsToLookUp(inputStream, new FileInputStream(processedFile))) {
+				final Set<String> asins = getASINsToLookUp(inputStream, new FileInputStream(processedFile));
+
+				final Set<String> successfulAsins = Sets.newHashSet();
+				final Set<String> attemptedAsins = Sets.newHashSet();
+
+				for (final String asin : asins) {
 					asinGroup.add(asin);
 
 					if (asinGroup.size() == 10) {
 						LOG.debug("Looking up ASINs {}", asinGroup);
+						ItemLookupResponse response;
 						try {
-							final List<Item> items = api.itemsLookup(Joiner.on(",").join(asinGroup),
+							response = api.itemLookup(Joiner.on(",").join(asinGroup),
 									responseGroupString);
+						} catch (final APIResponseException e1) {
+							// Retry logic in case the throttling is too high
+							LOG.error("Probable throttling response, waiting extra time", e1);
+							asinGroup.clear();
+							throttledRetries++;
+							if (throttledRetries > THROTTLE_MAX_RETRIES) {
+								break;
+							}
+							Thread.sleep(wait * (throttledRetries + 1));
+							continue;
+						}
 
-							for (final Item item : items) {
+						final Request itemRequest = response.getItems().get(0).getRequest();
+						if (itemRequest.getErrors() != null) {
+							for (final Errors.Error error : itemRequest.getErrors().getError()) {
+								LOG.error("Exception with API request for an item", new APIRequestException(error));
+							}
+						}
+
+						try {
+							for (final Item item : response.getItems().get(0).getItem()) {
 								LOG.debug("Got item titled {}", item.getItemAttributes().getTitle());
+								successfulAsins.add(item.getASIN());
 								outputProcessor.writeItem(item);
 							}
-						} catch (final APIRequestException e) {
-							LOG.error("Exception with API request", e);
+						} catch (final Exception e) {
+							LOG.error("Error getting items", e);
 						}
 
 						recordProcessed(asinGroup, processedOutStream);
+						attemptedAsins.addAll(asinGroup);
 						asinGroup.clear();
-						Thread.sleep(wait);
+						try {
+							throttledRetries = 0;
+							Thread.sleep(wait);
+						} catch (final InterruptedException e) {
+							LOG.error("Interrupted!", e);
+							break;
+						}
 					}
 				}
+
+				LOG.info("Successfully retrieved {} ASINs", successfulAsins.size());
+				final Set<String> failedAsins = Sets.difference(attemptedAsins, successfulAsins);
+				LOG.info("Failed to retrieve {} ASINs", failedAsins.size());
+				LOG.debug("Failed to retrieve ASINSs: {}", failedAsins);
+				LOG.info("Success rate: {} / {} = {}%", successfulAsins.size(), attemptedAsins.size(),
+						(double) successfulAsins.size() / attemptedAsins.size());
 			}
 		}
 	}
