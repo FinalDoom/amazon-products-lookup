@@ -7,7 +7,8 @@
 		http://www.springframework.org/schema/util http://www.springframework.org/schema/util/spring-util-3.0.xsd
 		http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-3.0.xsd">
 
-	<context:property-placeholder location="classpath:aws.properties" ignore-unresolvable="true" />
+	<context:annotation-config/>
+	<context:property-placeholder location="classpath:aws.properties" ignore-unresolvable="false" />
 
-	<bean class="com.maxpowered.amazon.advertising.api.SignedRequestsHelper" autowire="constructor" />
+	<bean class="com.maxpowered.amazon.advertising.api.SignedRequestsHelper" />
 </beans>

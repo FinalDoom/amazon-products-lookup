@@ -123,10 +123,11 @@ public class SignedRequestsHelper {
 	 *             if the encoding charset is invalid
 	 */
 	@Autowired
-	SignedRequestsHelper(@Value("aws.endpoint") final String endpoint,
-			@Value("aws.associateTag") final String associateTag,
-			@Value("aws.accessKeyId") final String awsAccessKeyId, @Value("aws.secretKey") final String awsSecretKey)
-			throws NoSuchAlgorithmException, InvalidKeyException, UnsupportedEncodingException {
+	SignedRequestsHelper(@Value("${aws.endpoint}") final String endpoint,
+			@Value("${aws.associateTag}") final String associateTag,
+			@Value("${aws.accessKeyId}") final String awsAccessKeyId,
+			@Value("${aws.secretKey}") final String awsSecretKey) throws NoSuchAlgorithmException, InvalidKeyException,
+			UnsupportedEncodingException {
 		this(Endpoint.valueOf(endpoint), associateTag, awsAccessKeyId, awsSecretKey);
 	}
 
