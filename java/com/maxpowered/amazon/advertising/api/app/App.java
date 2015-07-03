@@ -47,7 +47,7 @@ import com.maxpowered.amazon.advertising.api.processors.FileProcessor;
 
 /*
  * This class shows how to make a simple authenticated ItemLookup call to the Amazon Product Advertising API.
- * 
+ *
  * See the README.html that came with this sample for instructions on configuring and running the sample.
  */
 public class App {
@@ -103,8 +103,8 @@ public class App {
 			options.addOption("o", true, "Set the file to write fetched info xml to via FileProcessor. " + DEFAULT_STR +
 					outputDefault);
 			options.addOption("1", false, "Override output file and always output fetched info xml to std.out.");
-			options.addOption("t", true, "Set the requests per second throttle (max of 10). " + DEFAULT_STR
-					+ throttleDefault);
+			options.addOption("t", true, "Set the requests per hour throttle (max of " + MAX_APP_THROTTLE + "). "
+					+ DEFAULT_STR + throttleDefault);
 
 			final CommandLineParser parser = new DefaultParser();
 			CommandLine cmd = null;
