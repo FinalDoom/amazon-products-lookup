@@ -59,7 +59,7 @@ import com.maxpowered.amazon.advertising.api.processors.OutputProcessor;
 
 /*
  * This class shows how to make a simple authenticated ItemLookup call to the Amazon Product Advertising API.
- * 
+ *
  * See the README.html that came with this sample for instructions on configuring and running the sample.
  */
 public class App {
@@ -88,10 +88,11 @@ public class App {
 
 	public static void recordProcessed(final List<String> asins, final FileOutputStream processedFile)
 			throws IOException {
-		final BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(processedFile));
-		for (final String asin : asins) {
-			writer.write(asin);
-			writer.write(System.lineSeparator());
+		try (final BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(processedFile))) {
+			for (final String asin : asins) {
+				writer.write(asin);
+				writer.write(System.lineSeparator());
+			}
 		}
 	}
 
@@ -165,8 +166,7 @@ public class App {
 			if (!input.contains("/") && !input.contains("\\")) {
 				input = "/" + input;
 			}
-			final InputStream inputStream = input.equals(STD_IN_STR) ? System.in :
-					App.class.getClass().getResourceAsStream(input);
+			// Stream set up with output stream in try-with-resources
 
 			// Get processed file
 			String processed;
@@ -178,68 +178,73 @@ public class App {
 			LOG.debug("Processed file name (default {}) is {}", processedDefault, processed);
 			final File processedFile = new File(processed);
 			processedFile.createNewFile();
-			final FileOutputStream processedOutStream = new FileOutputStream(processedFile, true);
+			try (
+					final InputStream inputStream = input.equals(STD_IN_STR) ? System.in :
+							App.class.getClass().getResourceAsStream(input);
+					final FileOutputStream processedOutStream = new FileOutputStream(processedFile, true)) {
 
-			// Get output stream
-			String output;
-			if (cmd.hasOption("o")) {
-				output = cmd.getOptionValue("o");
-			} else {
-				output = outputDefault;
-			}
-			if (cmd.hasOption("1")) {
-				output = STD_OUT_STR;
-			}
-			LOG.debug("Output (default {}) name is {}", outputDefault, output);
-			if (output.equals(STD_OUT_STR)) {
-				final FileProcessor fileProcessor = ctx.getBeanFactory().getBean(FileProcessor.class);
-				fileProcessor.setOutputStream(System.out);
-			} else if (!output.equals(outputDefault)) {
-				final FileProcessor fileProcessor = ctx.getBeanFactory().getBean(FileProcessor.class);
-				fileProcessor.setOutputFile(output);
-			}
+				// Get output stream
+				String output;
+				if (cmd.hasOption("o")) {
+					output = cmd.getOptionValue("o");
+				} else {
+					output = outputDefault;
+				}
+				if (cmd.hasOption("1")) {
+					output = STD_OUT_STR;
+				}
+				LOG.debug("Output (default {}) name is {}", outputDefault, output);
+				if (output.equals(STD_OUT_STR)) {
+					final FileProcessor fileProcessor = ctx.getBeanFactory().getBean(FileProcessor.class);
+					fileProcessor.setOutputStream(System.out);
+				} else if (!output.equals(outputDefault)) {
+					final FileProcessor fileProcessor = ctx.getBeanFactory().getBean(FileProcessor.class);
+					fileProcessor.setOutputFile(output);
+				}
 
-			// Get throttle rate
-			final int throttle = Math.min(cmd.hasOption("t") ? Integer.valueOf(cmd.getOptionValue("t"))
-					: throttleDefault, MAX_APP_THROTTLE);
-			LOG.debug("Throttle (default {}) is {} requests per hour", throttleDefault, throttle);
-			// We don't want to hit our limit, just under an hour worth of milliseconds
-			final int wait = 3540000 / throttle;
+				// Get throttle rate
+				final int throttle = Math.min(cmd.hasOption("t") ? Integer.valueOf(cmd.getOptionValue("t"))
+						: throttleDefault, MAX_APP_THROTTLE);
+				LOG.debug("Throttle (default {}) is {} requests per hour", throttleDefault, throttle);
+				// We don't want to hit our limit, just under an hour worth of milliseconds
+				final int wait = 3540000 / throttle;
 
-			// Get the signed requests helper
-			final AmazonProductsAPI api = ctx.getBeanFactory().getBean(AmazonProductsAPI.class);
-			// Get the Output processor
-			final OutputProcessor outputProcessor = ctx.getBeanFactory().getBean(OutputProcessor.class);
+				// Get the signed requests helper
+				final AmazonProductsAPI api = ctx.getBeanFactory().getBean(AmazonProductsAPI.class);
+				// Get the Output processor
+				final OutputProcessor outputProcessor = ctx.getBeanFactory().getBean(OutputProcessor.class);
 
-			// This could be easily configured through CLI or properties
-			final List<String> responseGroups = Lists.newArrayList();
-			for (final ResponseGroup responseGroup : new ResponseGroup[] { ResponseGroup.IMAGES,
-					ResponseGroup.ITEM_ATTRIBUTES }) {
-				responseGroups.add(responseGroup.getResponseGroupName());
-			}
-			final String responseGroupString = Joiner.on(",").join(responseGroups);
+				// This could be easily configured through CLI or properties
+				final List<String> responseGroups = Lists.newArrayList();
+				for (final ResponseGroup responseGroup : new ResponseGroup[] { ResponseGroup.IMAGES,
+						ResponseGroup.ITEM_ATTRIBUTES }) {
+					responseGroups.add(responseGroup.getResponseGroupName());
+				}
+				final String responseGroupString = Joiner.on(",").join(responseGroups);
 
-			final List<String> asinGroup = Lists.newArrayListWithCapacity(10);
-			// Search the list of remaining ASINs
-			for (final String asin : getASINsToLookUp(inputStream, new FileInputStream(processedFile))) {
-				asinGroup.add(asin);
+				final List<String> asinGroup = Lists.newArrayListWithCapacity(10);
+				// Search the list of remaining ASINs
+				for (final String asin : getASINsToLookUp(inputStream, new FileInputStream(processedFile))) {
+					asinGroup.add(asin);
 
-				if (asinGroup.size() == 10) {
-					LOG.debug("Looking up ASINs {}", asinGroup);
-					try {
-						final List<Item> items = api.itemsLookup(Joiner.on(",").join(asinGroup), responseGroupString);
+					if (asinGroup.size() == 10) {
+						LOG.debug("Looking up ASINs {}", asinGroup);
+						try {
+							final List<Item> items = api.itemsLookup(Joiner.on(",").join(asinGroup),
+									responseGroupString);
 
-						for (final Item item : items) {
-							LOG.debug("Got item titled {}", item.getItemAttributes().getTitle());
-							outputProcessor.writeItem(item);
+							for (final Item item : items) {
+								LOG.debug("Got item titled {}", item.getItemAttributes().getTitle());
+								outputProcessor.writeItem(item);
+							}
+						} catch (final APIRequestException e) {
+							LOG.error("Exception with API request", e);
 						}
-					} catch (final APIRequestException e) {
-						LOG.error("Exception with API request", e);
-					}
 
-					recordProcessed(asinGroup, processedOutStream);
-					asinGroup.clear();
-					Thread.sleep(wait);
+						recordProcessed(asinGroup, processedOutStream);
+						asinGroup.clear();
+						Thread.sleep(wait);
+					}
 				}
 			}
 		}
