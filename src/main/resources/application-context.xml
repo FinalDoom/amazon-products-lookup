@@ -14,6 +14,7 @@
 
 	<bean class="com.maxpowered.amazon.advertising.api.SignedRequestsHelper" />
 	<bean class="com.maxpowered.amazon.advertising.api.AmazonProductsAPI" />
+	<bean class="com.maxpowered.amazon.advertising.api.app.ProductFetcher" />
 	
 	<bean class="com.maxpowered.amazon.advertising.api.processors.OutputProcessor">
 		<property name="processors">

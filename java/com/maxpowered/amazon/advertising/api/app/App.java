@@ -20,17 +20,11 @@
 
 package com.maxpowered.amazon.advertising.api.app;
 
-import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStreamWriter;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Set;
 
 import javax.xml.bind.JAXBException;
 import javax.xml.stream.XMLStreamException;
@@ -41,29 +35,19 @@ import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
-import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.support.AbstractApplicationContext;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 
-import com.amazon.webservices.awsecommerceservice._2013_08_01.Errors;
-import com.amazon.webservices.awsecommerceservice._2013_08_01.Item;
-import com.amazon.webservices.awsecommerceservice._2013_08_01.ItemLookupResponse;
-import com.amazon.webservices.awsecommerceservice._2013_08_01.Request;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
-import com.maxpowered.amazon.advertising.api.APIRequestException;
-import com.maxpowered.amazon.advertising.api.APIResponseException;
-import com.maxpowered.amazon.advertising.api.AmazonProductsAPI;
 import com.maxpowered.amazon.advertising.api.ResponseGroup;
 import com.maxpowered.amazon.advertising.api.processors.FileProcessor;
-import com.maxpowered.amazon.advertising.api.processors.OutputProcessor;
 
 /*
  * This class shows how to make a simple authenticated ItemLookup call to the Amazon Product Advertising API.
- *
+ * 
  * See the README.html that came with this sample for instructions on configuring and running the sample.
  */
 public class App {
@@ -71,7 +55,6 @@ public class App {
 
 	private static final int MAX_APP_THROTTLE = 25000;
 	private static final int DEFAULT_APP_THROTTLE = 2000;
-	private static final int THROTTLE_MAX_RETRIES = 3;
 	private static final String PROPERTY_APP_THROTTLE = "app.throttle";
 	private static final String PROPERTY_APP_OUTPUT = "app.output";
 	private static final String PROPERTY_APP_INPUT = "app.input";
@@ -79,29 +62,7 @@ public class App {
 	private static final String DEFAULT_PROCESSED_FILE_BASE = "processedASINs" + PROCESSED_EXT;
 	private static final String STD_IN_STR = "std.in";
 	private static final String STD_OUT_STR = "std.out";
-	public static final String DEFAULT_STR = "Defaults to ";
-
-	public static Set<String> getASINsToLookUp(final InputStream input, final FileInputStream processedFile)
-			throws FileNotFoundException, IOException {
-		LOG.debug("Reading ASINS from {} and excluding those in {}", input, processedFile);
-		final Set<String> ret = Sets.newHashSet(IOUtils.readLines(input, StandardCharsets.UTF_8));
-		LOG.info("Got {} input ASINs", ret.size());
-		// Get any ASINs already processed
-		final Set<String> processed = Sets.newHashSet(IOUtils.readLines(processedFile, StandardCharsets.UTF_8));
-		LOG.info("Got {} processed ASINs", processed.size());
-
-		return Sets.difference(ret, processed);
-	}
-
-	public static void recordProcessed(final List<String> asins, final FileOutputStream processedFile)
-			throws IOException {
-		final BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(processedFile));
-		for (final String asin : asins) {
-			writer.write(asin);
-			writer.write(System.lineSeparator());
-		}
-		writer.flush();
-	}
+	private static final String DEFAULT_STR = "Defaults to ";
 
 	public static String getOptionDefaultBasedOnSpringProperty(final AbstractApplicationContext ctx,
 			final String propName, final String defaultStr) {
@@ -161,6 +122,24 @@ public class App {
 				return;
 			}
 
+			// Get throttle rate
+			final int throttle = Math.min(cmd.hasOption("t") ? Integer.valueOf(cmd.getOptionValue("t"))
+					: throttleDefault, MAX_APP_THROTTLE);
+			LOG.debug("Throttle (default {}) is {} requests per hour", throttleDefault, throttle);
+			// We don't want to hit our limit, just under an hour worth of milliseconds
+			final int requestWait = 3540000 / throttle;
+
+			// Get processed file
+			String processed;
+			if (cmd.hasOption("p")) {
+				processed = cmd.getOptionValue("p");
+			} else {
+				processed = processedDefault;
+			}
+			LOG.debug("Processed file name (default {}) is {}", processedDefault, processed);
+			final File processedFile = new File(processed);
+			processedFile.createNewFile();
+
 			// Get input stream
 			String input;
 			if (cmd.hasOption("i")) {
@@ -173,22 +152,9 @@ public class App {
 			if (!input.contains("/") && !input.contains("\\")) {
 				input = "/" + input;
 			}
-			// Stream set up with output stream in try-with-resources
-
-			// Get processed file
-			String processed;
-			if (cmd.hasOption("p")) {
-				processed = cmd.getOptionValue("p");
-			} else {
-				processed = processedDefault;
-			}
-			LOG.debug("Processed file name (default {}) is {}", processedDefault, processed);
-			final File processedFile = new File(processed);
-			processedFile.createNewFile();
 			try (
 					final InputStream inputStream = input.equals(STD_IN_STR) ? System.in :
-							App.class.getClass().getResourceAsStream(input);
-					final FileOutputStream processedOutStream = new FileOutputStream(processedFile, true)) {
+							App.class.getClass().getResourceAsStream(input)) {
 
 				// Get output stream
 				String output;
@@ -201,6 +167,7 @@ public class App {
 					output = STD_OUT_STR;
 				}
 				LOG.debug("Output (default {}) name is {}", outputDefault, output);
+				// Special logic to set the FileProcessor output
 				if (output.equals(STD_OUT_STR)) {
 					final FileProcessor fileProcessor = ctx.getBeanFactory().getBean(FileProcessor.class);
 					fileProcessor.setOutputStream(System.out);
@@ -208,18 +175,6 @@ public class App {
 					final FileProcessor fileProcessor = ctx.getBeanFactory().getBean(FileProcessor.class);
 					fileProcessor.setOutputFile(output);
 				}
-
-				// Get throttle rate
-				final int throttle = Math.min(cmd.hasOption("t") ? Integer.valueOf(cmd.getOptionValue("t"))
-						: throttleDefault, MAX_APP_THROTTLE);
-				LOG.debug("Throttle (default {}) is {} requests per hour", throttleDefault, throttle);
-				// We don't want to hit our limit, just under an hour worth of milliseconds
-				final int wait = 3540000 / throttle;
-
-				// Get the signed requests helper
-				final AmazonProductsAPI api = ctx.getBeanFactory().getBean(AmazonProductsAPI.class);
-				// Get the Output processor
-				final OutputProcessor outputProcessor = ctx.getBeanFactory().getBean(OutputProcessor.class);
 
 				// This could be easily configured through CLI or properties
 				final List<String> responseGroups = Lists.newArrayList();
@@ -229,71 +184,14 @@ public class App {
 				}
 				final String responseGroupString = Joiner.on(",").join(responseGroups);
 
-				int throttledRetries = 0;
-				final List<String> asinGroup = Lists.newArrayListWithCapacity(10);
 				// Search the list of remaining ASINs
-				final Set<String> asins = getASINsToLookUp(inputStream, new FileInputStream(processedFile));
+				final ProductFetcher fetcher = ctx.getBeanFactory().getBean(ProductFetcher.class);
+				fetcher.setProcessedFile(processedFile);
+				fetcher.setRequestWait(requestWait);
+				fetcher.setInputStream(inputStream);
+				fetcher.setResponseGroups(responseGroupString);
 
-				final Set<String> successfulAsins = Sets.newHashSet();
-				final Set<String> attemptedAsins = Sets.newHashSet();
-
-				for (final String asin : asins) {
-					asinGroup.add(asin);
-
-					if (asinGroup.size() == 10) {
-						LOG.debug("Looking up ASINs {}", asinGroup);
-						ItemLookupResponse response;
-						try {
-							response = api.itemLookup(Joiner.on(",").join(asinGroup),
-									responseGroupString);
-						} catch (final APIResponseException e1) {
-							// Retry logic in case the throttling is too high
-							LOG.error("Probable throttling response, waiting extra time", e1);
-							asinGroup.clear();
-							throttledRetries++;
-							if (throttledRetries > THROTTLE_MAX_RETRIES) {
-								break;
-							}
-							Thread.sleep(wait * (throttledRetries + 1));
-							continue;
-						}
-
-						final Request itemRequest = response.getItems().get(0).getRequest();
-						if (itemRequest.getErrors() != null) {
-							for (final Errors.Error error : itemRequest.getErrors().getError()) {
-								LOG.error("Exception with API request for an item", new APIRequestException(error));
-							}
-						}
-
-						try {
-							for (final Item item : response.getItems().get(0).getItem()) {
-								LOG.debug("Got item titled {}", item.getItemAttributes().getTitle());
-								successfulAsins.add(item.getASIN());
-								outputProcessor.writeItem(item);
-							}
-						} catch (final Exception e) {
-							LOG.error("Error getting items", e);
-						}
-
-						recordProcessed(asinGroup, processedOutStream);
-						attemptedAsins.addAll(asinGroup);
-						asinGroup.clear();
-						try {
-							throttledRetries = 0;
-							Thread.sleep(wait);
-						} catch (final InterruptedException e) {
-							LOG.error("Interrupted!", e);
-							break;
-						}
-					}
-				}
-
-				LOG.info("Successfully retrieved {} ASINs", successfulAsins.size());
-				final Set<String> failedAsins = Sets.difference(attemptedAsins, successfulAsins);
-				LOG.info("Failed to retrieve {} ASINs", failedAsins.size());
-				LOG.debug("Failed to retrieve ASINSs: {}", failedAsins);
-				LOG.info("Success rate: {} / {} = {}%", successfulAsins.size(), attemptedAsins.size(),
-						(double) successfulAsins.size() / attemptedAsins.size());
+				fetcher.fetchProductInformation();
 			}
 		}
 	}
