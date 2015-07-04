@@ -1,0 +1,6 @@
+mvn clean compile package
+
+Put target/amazon-products-lookup-0.0.1-SNAPSHOT.one-jar.jar wherever you want to run it.
+
+Run a command like:
+java -jar amazon-products-lookup-0.0.1-SNAPSHOT.one-jar.jar -i asins.txt
