@@ -21,6 +21,7 @@
 package com.maxpowered.amazon.advertising.api.app;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -47,7 +48,7 @@ import com.maxpowered.amazon.advertising.api.processors.FileProcessor;
 
 /*
  * This class shows how to make a simple authenticated ItemLookup call to the Amazon Product Advertising API.
- *
+ * 
  * See the README.html that came with this sample for instructions on configuring and running the sample.
  */
 public class App {
@@ -148,13 +149,8 @@ public class App {
 				input = inputDefault;
 			}
 			LOG.debug("Input name (default {}) is {}", inputDefault, input);
-			// Need to read from an absolute path or /file.blah to read from classpath root
-			if (!input.contains("/") && !input.contains("\\")) {
-				input = "/" + input;
-			}
 			try (
-					final InputStream inputStream = input.equals(STD_IN_STR) ? System.in :
-							App.class.getClass().getResourceAsStream(input)) {
+					final InputStream inputStream = getInputStream(input)) {
 
 				// Get output stream
 				String output;
@@ -194,5 +190,24 @@ public class App {
 				fetcher.fetchProductInformation();
 			}
 		}
+	}
+
+	private static InputStream getInputStream(final String input) throws FileNotFoundException {
+		InputStream inputStream;
+		if (input.equals(STD_IN_STR)) {
+			inputStream = System.in;
+		} else {
+			String classInput = input;
+			// Need to read from an absolute path or /file.blah to read from classpath root
+			if (!input.contains("/") && !input.contains("\\")) {
+				classInput = "/" + input;
+			}
+			inputStream = App.class.getClass().getResourceAsStream(classInput);
+			if (inputStream == null) {
+				inputStream = new FileInputStream(input);
+			}
+		}
+
+		return inputStream;
 	}
 }
