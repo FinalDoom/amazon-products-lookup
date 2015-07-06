@@ -48,7 +48,7 @@ import com.maxpowered.amazon.advertising.api.processors.FileProcessor;
 
 /*
  * This class shows how to make a simple authenticated ItemLookup call to the Amazon Product Advertising API.
- * 
+ *
  * See the README.html that came with this sample for instructions on configuring and running the sample.
  */
 public class App {
@@ -98,7 +98,8 @@ public class App {
 
 			options.addOption("h", false, "Display this help.");
 			options.addOption("i", true, "Set the file to read ASINs from. " + DEFAULT_STR + inputDefault);
-			options.addOption("p", true, "Set the file to store processed ASINs in. " + DEFAULT_STR + processedDefault);
+			options.addOption("p", true, "Set the file to store processed ASINs in. " + DEFAULT_STR + processedDefault
+					+ " or '" + PROCESSED_EXT + "' appended to the input file name.");
 			// Add a note that the output depends on the configured processors. If none are configured, it defaults to a
 			// std.out processor
 			options.addOption("o", true, "Set the file to write fetched info xml to via FileProcessor. " + DEFAULT_STR +
@@ -130,17 +131,6 @@ public class App {
 			// We don't want to hit our limit, just under an hour worth of milliseconds
 			final int requestWait = 3540000 / throttle;
 
-			// Get processed file
-			String processed;
-			if (cmd.hasOption("p")) {
-				processed = cmd.getOptionValue("p");
-			} else {
-				processed = processedDefault;
-			}
-			LOG.debug("Processed file name (default {}) is {}", processedDefault, processed);
-			final File processedFile = new File(processed);
-			processedFile.createNewFile();
-
 			// Get input stream
 			String input;
 			if (cmd.hasOption("i")) {
@@ -149,6 +139,18 @@ public class App {
 				input = inputDefault;
 			}
 			LOG.debug("Input name (default {}) is {}", inputDefault, input);
+
+			// Get processed file
+			String processed;
+			if (cmd.hasOption("p")) {
+				processed = cmd.getOptionValue("p");
+			} else {
+				processed = input + PROCESSED_EXT;
+			}
+			LOG.debug("Processed file name (default {}) is {}", processedDefault, processed);
+			final File processedFile = new File(processed);
+			processedFile.createNewFile();
+
 			try (
 					final InputStream inputStream = getInputStream(input)) {
 
@@ -186,6 +188,14 @@ public class App {
 				fetcher.setRequestWait(requestWait);
 				fetcher.setInputStream(inputStream);
 				fetcher.setResponseGroups(responseGroupString);
+
+				// This ensures that statistics of processed asins should almost always get printed at the end
+				Runtime.getRuntime().addShutdownHook(new Thread() {
+					@Override
+					public void run() {
+						fetcher.logStatistics();
+					}
+				});
 
 				fetcher.fetchProductInformation();
 			}

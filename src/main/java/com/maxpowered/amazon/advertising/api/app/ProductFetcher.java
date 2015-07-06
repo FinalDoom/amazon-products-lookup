@@ -48,6 +48,7 @@ public class ProductFetcher implements AutoCloseable {
 
 	private final Set<String> successfulAsins = Sets.newHashSet();
 	private final Set<String> attemptedAsins = Sets.newHashSet();
+	private Set<String> asins;
 
 	@Autowired
 	ProductFetcher(final AmazonProductsAPI api, final OutputProcessor outputProcessor) {
@@ -56,7 +57,7 @@ public class ProductFetcher implements AutoCloseable {
 	}
 
 	public void setProcessedFile(final File file) throws FileNotFoundException {
-		processedFileOutputStream = new FileOutputStream(file);
+		processedFileOutputStream = new FileOutputStream(file, true);
 		processedFileInputStream = new FileInputStream(file);
 	}
 
@@ -72,17 +73,17 @@ public class ProductFetcher implements AutoCloseable {
 		this.requestWait = requestWait;
 	}
 
-	public Set<String> getASINsToLookUp()
+	public void computeASINsToLookUp()
 			throws FileNotFoundException, IOException {
 		LOG.debug("Reading ASINS from {} and excluding those in {}", inputStream, processedFileInputStream);
-		final Set<String> ret = Sets.newHashSet(IOUtils.readLines(inputStream, StandardCharsets.UTF_8));
-		LOG.info("Got {} input ASINs", ret.size());
+		final Set<String> all = Sets.newHashSet(IOUtils.readLines(inputStream, StandardCharsets.UTF_8));
+		LOG.info("Got {} input ASINs", all.size());
 		// Get any ASINs already processed
 		final Set<String> processed = Sets.newHashSet(IOUtils.readLines(processedFileInputStream,
 				StandardCharsets.UTF_8));
 		LOG.info("Got {} processed ASINs", processed.size());
 
-		return Sets.difference(ret, processed);
+		asins = Sets.difference(all, processed);
 	}
 
 	public void recordProcessed(final List<String> asins)
@@ -97,7 +98,7 @@ public class ProductFetcher implements AutoCloseable {
 
 	public void fetchProductInformation() throws FileNotFoundException, IOException, JAXBException, XMLStreamException {
 		// Search the list of remaining ASINs
-		final Set<String> asins = getASINsToLookUp();
+		computeASINsToLookUp();
 
 		final List<String> asinGroup = Lists.newArrayListWithCapacity(10);
 		for (final String asin : asins) {
@@ -110,7 +111,9 @@ public class ProductFetcher implements AutoCloseable {
 			}
 		}
 		lookUpAsinGroup(asinGroup);
+	}
 
+	public void logStatistics() {
 		LOG.info("Successfully retrieved {} ASINs", successfulAsins.size());
 		final Set<String> failedAsins = Sets.difference(attemptedAsins, successfulAsins);
 		LOG.info("Failed to retrieve {} ASINs", failedAsins.size());
@@ -119,7 +122,6 @@ public class ProductFetcher implements AutoCloseable {
 				(double) successfulAsins.size() / attemptedAsins.size());
 		LOG.info("Processed asins {} / {} = {}%", attemptedAsins.size(), asins.size(),
 				(double) attemptedAsins.size() / asins.size());
-
 	}
 
 	public boolean lookUpAsinGroup(final List<String> asinGroup) throws IOException, JAXBException, XMLStreamException {
